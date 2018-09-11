@@ -1,5 +1,4 @@
-def create_fem_input(Lx, moduli, input_fname, axis,
-        task_name_template='E_',
+def create_fem_input(Lx, moduli, input_fname, axis, task_name_template,
         mesh_fname='mesh.xdr', materials_fname='materials.bin'):
 
     """
@@ -34,10 +33,17 @@ def create_fem_input(Lx, moduli, input_fname, axis,
             'MeshFileName {0}'.format(mesh_fname),
             'MaterialsGlobalFileName {0}'.format(materials_fname),
             'TaskName {0}{1}'.format(task_name_template, axis),
-            'G_filler {0}'.format(moduli[0]),
-            'G_interface {0}'.format(moduli[1]),
-            'G_matrix {0}'.format(moduli[2]),
-            'Strain', strains[axis]
+            'G_filler {0}\n'.format(moduli[0])]))
+        if len(moduli) == 3: # ternary
+            fem_input.write('\n'.join([
+                'G_interface {0}'.format(moduli[1]),
+                'G_matrix {0}'.format(moduli[2]),
+                'Strain', strains[axis]
+        ]))
+        elif len(moduli) == 2:
+            fem_input.write('\n'.join([
+                'G_matrix {0}'.format(moduli[1]),
+                'Strain', strains[axis]
         ]))
     return True
 

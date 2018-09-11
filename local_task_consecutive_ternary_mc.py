@@ -23,13 +23,13 @@ class TaskConsecutiveTernaryMc:
     """
     disk_thickness = 0.1
     vertices_number = 6
-    structure_exe = './structure/MC_exfoliation'
+    structure_exe = './structure/ternary_mc'
     gen_mesh_exe='/home/anton/FEMFolder/gen_mesh.x'
     process_mesh_exe='/home/anton/FEMFolder/processMesh.x'
     fem_main_ternary_exe='/home/anton/FEMFolder/FEManton3.o'
     libs = '/home/anton/FEMFolder/libs'
     my_libs = '/home/anton/FEMFolder/my_libs'
-    task_name_template = 'E_'
+    task_name_template = 'ternary_E_'
 
     def __init__(self, wd,
             ar, tau, Lr,
@@ -91,7 +91,7 @@ class TaskConsecutiveTernaryMc:
         geo_fname = new_geo_fname
         os.remove(stdout_fname)
         os.remove(stderr_fname)
-        print('  structure done')
+        print('  structure done', time.asctime())
 
         # fem, gen_mesh
         fem_gen_out =  '{0}/{1}/{2}'.format(
@@ -107,7 +107,7 @@ class TaskConsecutiveTernaryMc:
             stdout_exe=fem_gen_out, stderr_exe=fem_gen_err)
         os.remove(fem_gen_out)
         os.remove(fem_gen_err)
-        print('  gen_mesh done')
+        print('  gen_mesh done', time.asctime())
 
         # fem, process_mesh
         process_mesh_out =  '{0}/{1}/{2}'.format(
@@ -125,7 +125,7 @@ class TaskConsecutiveTernaryMc:
             memory_ratio=0.3)
         os.remove(process_mesh_out)
         os.remove(process_mesh_err)
-        print('  process_mesh done')
+        print('  process_mesh done', time.asctime())
 
         # fem main
         fem_input_template_fname = 'input_{0}'
@@ -142,6 +142,7 @@ class TaskConsecutiveTernaryMc:
             create_fem_input(
                 Lx=self.ar/2 * self.disk_thickness * self.Lr,
                 moduli=self.moduli,
+                task_name_template=self.task_name_template,
                 input_fname=script_fname,
                 axis=axis,
                 mesh_fname='mesh.xdr',
@@ -173,7 +174,7 @@ class TaskConsecutiveTernaryMc:
             }
             os.remove(stdout_fname)
             os.remove(stderr_fname)
-            #os.remove(script_fname)
+            os.remove(script_fname)
             shutil.move(fem_main_results_fname, '{0}/{1}/{2}_{3}'.format(
                 self.wd, self.files_dir, time_tag, fem_main_results_fname))
 
@@ -188,7 +189,8 @@ class TaskConsecutiveTernaryMc:
             results_ready.append(new_results_json_entry)
             f = open('{0}/{1}'.format(self.wd, self.results_json), 'w')
             json.dump(results_ready, f, indent=4)
-            print('  fem_main done on', axis)
+            print('  fem_main done', axis, new_results_json_entry['E'],
+                new_results_json_entry['fi'], time.asctime())
 
         return True
 
@@ -202,7 +204,6 @@ class TaskConsecutiveTernaryMc:
                 disks_number += 1
             else:
                 consecutive_fails += 1
-            break
 
             # clean-up after step finish
             for fname in ['mesh.xdr', 'out.mesh', 'stresses.txt']:
@@ -217,11 +218,11 @@ class TaskConsecutiveTernaryMc:
 if __name__ == '__main__':
     tau = 1
     ar = 5
-    Lr = 5
-    wd = 'Lr_{0}_ar_{1}_tau_{2}'.format(Lr, ar, tau)
+    Lr = 10
+    wd = 'ternary_Lr_{0}_ar_{1}_tau_{2}'.format(Lr, ar, tau)
     max_attempts = 100
     moduli = [232, 4, 1.5]
-    results_json = 'test.json'
+    results_json = 'ternary_Lr_{0}_ar_{1}_tau_{2}.json'.format(Lr, ar, tau)
 
     t = TaskConsecutiveTernaryMc(wd=wd,
         ar=ar, tau=tau, Lr=Lr,

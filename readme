@@ -1,0 +1,12 @@
+# Better version of fem tasks runner
+
+task_consecutive_ternary_mc - task where disks number increases 
+    starting from 1 until consecutive fails happen. ar, tau, Lr are fixed.
+    The system is ternary; Monte-Carlo algorithm of its formation is used.
+
+task_consecutive_ternary_mc - the same for binary system
+
+
+# Executables are taken from RELEASE_CppPolygons
+
+[binary/ternary]_[mc/mix]
