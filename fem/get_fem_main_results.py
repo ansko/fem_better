@@ -25,10 +25,13 @@ def get_fem_main_results(fname, axis):
     vol_total = float(lines[1].split()[1])
     stress = float(lines[14].split()[stresses_indices[axis]])
     strain = float(lines[14].split()[strains_indices[axis]])
-    return {
-        'fi_filler': vol_filler / vol_total,
-        'E': stress / strain,
-    }
+    try:
+        return {
+            'fi_filler': vol_filler / vol_total,
+            'E': stress / strain,
+        }
+    except ZeroDivisionError:
+        return {}
 
 
 if __name__ == '__main__':

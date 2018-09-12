@@ -1,8 +1,12 @@
 # ! Do This Firstly
 
-copy executables of structure preparation:
+copy executables of structure preparation (from RELEASE_CppPolygons):
     mc_binary for [local/remote]_task_consecutive_binary_mc
     mc_ternary for [local/remote]_task_consecutive_ternary_mc
+to ./structure
+
+copy private_settings.py to .
+
 
 # Better version of fem tasks runner
 
@@ -13,10 +17,3 @@ terbary - the system is ternary
 binary - the system  is binary
 
 mc - Monte-Carlo algorithm of its formation is used.
-
-task_consecutive_ternary_mc - the same for binary system
-
-
-# Executables are taken from RELEASE_CppPolygons
-
-[local/remote]_task_consecutive_[binary/ternary]_mc

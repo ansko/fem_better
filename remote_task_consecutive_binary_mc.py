@@ -233,8 +233,6 @@ class RemoteTaskConsecutiveBinaryMc:
             self.ssh.exec_command(command)
         else:
             print('gen_mesh failed')
-            pprint(sftp.listdir('{0}/{1}'.format(
-                self.cluster_main_dir, self.remote_wd)))
             return False
         self.ssh.exec_command('rm {0}/{1}/{2}.err'.format(
             self.cluster_main_dir, self.remote_wd, task_id))
@@ -275,8 +273,6 @@ class RemoteTaskConsecutiveBinaryMc:
             pass
         else:
             print('process_mesh failed')
-            pprint(sftp.listdir('{0}/{1}'.format(
-                self.cluster_main_dir, self.remote_wd)))
             return False
         self.ssh.exec_command('rm {0}/{1}/{2}.err'.format(
             self.cluster_main_dir, self.remote_wd, task_id))
@@ -324,8 +320,6 @@ class RemoteTaskConsecutiveBinaryMc:
                         self.local_wd, self.files_dir, results_fname))
             else:
                 print('fem_main along {0} failed'.format(axis))
-                pprint(sftp.listdir('{0}/{1}'.format(
-                    self.cluster_main_dir, self.remote_wd)))
                 return False
             self.ssh.exec_command('rm {0}/{1}/{2}'.format(
                 self.cluster_main_dir, self.remote_wd, results_fname))
