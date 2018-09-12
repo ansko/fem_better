@@ -1,12 +1,22 @@
+# ! Do This Firstly
+
+copy executables of structure preparation:
+    mc_binary for [local/remote]_task_consecutive_binary_mc
+    mc_ternary for [local/remote]_task_consecutive_ternary_mc
+
 # Better version of fem tasks runner
 
-task_consecutive_ternary_mc - task where disks number increases 
-    starting from 1 until consecutive fails happen. ar, tau, Lr are fixed.
-    The system is ternary; Monte-Carlo algorithm of its formation is used.
+consecutive - disks number increases starting from 1 until consecutive
+    fails happen. ar, tau, Lr are fixed.
+
+terbary - the system is ternary
+binary - the system  is binary
+
+mc - Monte-Carlo algorithm of its formation is used.
 
 task_consecutive_ternary_mc - the same for binary system
 
 
 # Executables are taken from RELEASE_CppPolygons
 
-[binary/ternary]_[mc/mix]
+[local/remote]_task_consecutive_[binary/ternary]_mc

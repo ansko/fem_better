@@ -175,10 +175,9 @@ class LocalTaskConsecutiveBinaryMc:
                     except json.decoder.JSONDecodeError:
                         pass
             results_ready.append(new_results_json_entry)
-            f = open('{0}/{1}'.format(self.wd, self.results_json), 'w')
-            json.dump(results_ready, f, indent=4)
+            with open('{0}/{1}'.format(self.wd, self.results_json), 'w') as f:
+                json.dump(results_ready, f, indent=4)
             print('  fem_main done on', axis)
-
         return True
 
     def run(self):
@@ -203,8 +202,8 @@ class LocalTaskConsecutiveBinaryMc:
 
 
 if __name__ == '__main__':
-    ar = 5
-    Lr = 5
+    ar = 4
+    Lr = 10
     wd = 'binary_Lr_{0}_ar_{1}'.format(Lr, ar)
     max_attempts = 100
     moduli = [232, 1.5]
