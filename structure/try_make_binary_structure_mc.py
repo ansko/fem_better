@@ -4,8 +4,8 @@ import subprocess
 def try_make_binary_structure_mc(
         log_fname, settings_fname, geo_fname,
         ar, Lr, max_attempts, disks_number,
-        disk_thickness=0.1, vertices_number=6,
-        stdout_exe=None, stderr_exe=None, structure_exe='./structure/binary_mc'):
+        disk_thickness, vertices_number, structure_exe,
+        stdout=None, stderr=None):
 
     """
     Creates the structure of the ternary composite where fillers are
@@ -48,13 +48,13 @@ def try_make_binary_structure_mc(
         f.write('geo_fname {0}\n'.format(geo_fname))
 
     # Run executable
-    if stdout_exe:
-        stdout_exe = open(stdout_exe, 'w')
-    if stderr_exe:
-        stderr_exe = open(stderr_exe, 'w')
+    if stdout:
+        stdout = open(stdout, 'w')
+    if stderr:
+        stderr = open(stderr, 'w')
     code = subprocess.call(
         [structure_exe, settings_fname],
-        stdout=stdout_exe, stderr=stderr_exe)
+        stdout=stdout, stderr=stderr)
     if code == 0:
         return True
     return False

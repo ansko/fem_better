@@ -3,9 +3,14 @@
 copy executables of structure preparation (from RELEASE_CppPolygons):
     mc_binary for [local/remote]_task_consecutive_binary_mc
     mc_ternary for [local/remote]_task_consecutive_ternary_mc
-to ./structure
+to .
 
 copy private_settings.py to .
+ClusterSettingsKiae:
+    host
+    username
+    password
+    key_file
 
 
 # Better version of fem tasks runner
@@ -16,4 +21,4 @@ consecutive - disks number increases starting from 1 until consecutive
 terbary - the system is ternary
 binary - the system  is binary
 
-mc - Monte-Carlo algorithm of its formation is used.
+mc - Monte-Carlo algorithm of system formation is used.

@@ -1,4 +1,4 @@
-def get_fem_main_results(fname, axis):
+def get_fem_main_results(results_fname, axis):
     """
     FEMMain performs tension along single axis and produces
     output file with some significant lines (lines indexing starts from 0):
@@ -19,7 +19,7 @@ def get_fem_main_results(fname, axis):
 
     stresses_indices = {'XX': 9, 'YY': 13, 'ZZ': 17}
     strains_indices = {'XX': 0, 'YY': 4, 'ZZ': 8}
-    with open(fname) as f:
+    with open(results_fname) as f:
         lines = f.read().split('\n')
     vol_filler = float(lines[1].split()[0])
     vol_total = float(lines[1].split()[1])

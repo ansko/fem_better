@@ -1,87 +1,96 @@
 import json
 import os
+import paramiko
 import shutil
 import time
 
 import pprint
 pprint=pprint.PrettyPrinter(indent=4).pprint
 
-import paramiko
-
+from all_possible_options import APO
 from fem.create_cluster_inputs import ClusterInputsCreator
 from fem.create_fem_input import create_fem_input
 from fem.get_fem_main_results import get_fem_main_results
-from fem.run_fem_main_ternary_exe import run_fem_main_ternary_exe
-from fem.run_gen_mesh_exe import run_gen_mesh_exe
-from fem.run_process_mesh_exe import run_process_mesh_exe
-
 from structure.process_structure_log import process_structure_log
 from structure.try_make_ternary_structure_mc import try_make_ternary_structure_mc
+from try_remove_files import try_remove_files
 
 from private_settings import ClusterSettingsKiae
 
 
+import sys
+
 class RemoteTaskConsecutiveTernaryMc:
     """
-    Task where ar, tau, Lr are fixed while disks number increases
+    Remote binary task where ar, Lr are fixed while disks number increases
 
     """
-    disk_thickness = 0.1
-    vertices_number = 6
-    structure_exe = './structure/ternary_mc'
-    gen_mesh_exe='/home/anton/FEMFolder/gen_mesh.x'
-    process_mesh_exe='/home/anton/FEMFolder/processMesh.x'
-    fem_main_ternary_exe='/home/anton/FEMFolder/FEManton3.o'
-    libs = '/home/anton/FEMFolder/libs'
-    my_libs = '/home/anton/FEMFolder/my_libs'
-    task_name_template = 'E_'
-    cluster_home_dir = '/hfs/head2-hfs2/users/antonsk'
-    cluster_main_dir = '/s/ls2/users/antonsk'
-    cluster_donor_dir ='FEM_multi_donor'
-    completion_delay = 5 # delay after cluster task finish
 
-    libs = [
-        'libnglib.la', 'libmesh.la', 'libmesh.so.0.0.0', 'libocc.so.0',
-        'libslepc.so', 'libcsg.so', 'libmesh_dbg.so.0.0.0', 'libocc.so.0.0.0',
-        'libgeom2d.so.0.0.0', 'libinterface.so.0.0.0', 'libstl.so', 'libocc.so',
-        'libcsg.so.0.0.0', 'libpetsc.so.3.7', 'libslepc.so.3.7.3',
-        'libmesh_devel.so.0.0.0', 'libinterface.la', 'libnetcdf.so.7.2.0',
-        'libnetcdf.so.7', 'libcsg.so.0', 'libocc.la', 'libnglib.so',
-        'libmesh_opt.so.0.0.0', 'libpetsc.so', 'libstl.so.0.0.0', 'libnetcdf.so',
-        'libmesh_dbg.so.0', 'libgeom2d.so.0', 'libinterface.so', 'libmesh_opt.so',
-        'libinterface.so.0', 'libslepc.so.3.7', 'libpetsc.so.3.7.5',
-        'libmesh_dbg.so', 'libmesh_opt.so.0', 'libmesh.so', 'libmesh_devel.so',
-        'libstl.la', 'libstl.so.0', 'libmesh.so.0', 'libgeom2d.so',
-        'libgeom2d.la', 'libcsg.la', 'libmesh_devel.so.0'
-    ]
-    required_fnames = [
-        'gen_mesh.x', 'processMesh.x', 'FEManton3.o', 'FEManton2.o',
-        'materials.txt', 'matrices.txt', 'tensor.cpp', 'tensor.h'
-    ]
-    remote_geo_fname = '1.geo'
-
-    def __init__(self, local_wd, remote_wd,
-            ar, Lr, tau,
-            max_attempts,
+    def __init__(self,
+            local_wd, remote_wd,
+            ar, Lr, tau, max_attempts,
             moduli,
             results_json,
-            geo_dir='geo', files_dir='files'):
-        try:
-            os.mkdir(local_wd)
-            os.mkdir('{0}/{1}'.format(local_wd, geo_dir))
-            os.mkdir('{0}/{1}'.format(local_wd, files_dir))
-        except FileExistsError:
-            pass
+            geo_subdir='geo', files_subdir='files'):
+
         self.local_wd = local_wd
         self.remote_wd = remote_wd
-        self.geo_dir = geo_dir
-        self.files_dir = files_dir
+        self.geo_subdir = geo_subdir
+        self.files_subdir = files_subdir
         self.ar = ar
         self.Lr = Lr
         self.tau = tau
         self.max_attempts = max_attempts
         self.moduli = moduli
         self.results_json = results_json
+
+        a = APO(type(self).__name__, local_wd=local_wd)
+
+        self.disk_thickness = a.th
+        self.vertices_number = a.vertices_number
+        self.structure_exe = a.structure_exe
+        self.structure_log_template = a.structure_log_template
+        self.structure_settings_template = a.structure_settings_template
+        self.structure_geo_fname_template = a.structure_geo_fname_template
+        self.structure_stdout_template = a.structure_stdout_template
+        self.structure_stderr_template = a.structure_stderr_template
+        self.structure_new_geo_fname_template = a.structure_new_geo_fname_template
+        self.remote_geo_fname = a.default_remote_geo_fname
+        self.libs = a.libs
+        self.gen_mesh_sh = a.default_gen_mesh_sh
+        self.gen_mesh_log = a.default_gen_mesh_log
+        self.gen_mesh_exe = a.gen_mesh_exe_fname
+        self.gen_mesh_generated_mesh = a.gen_mesh_generated_mesh
+        self.meshing_parameters = a.meshing_parameters
+        self.process_mesh_sh = a.default_process_mesh_sh
+        self.process_mesh_log = a.default_process_mesh_log
+        self.process_mesh_exe = a.process_mesh_exe_fname
+        self.process_mesh_input_mesh = a.process_mesh_input_mesh
+        self.process_mesh_generated_mesh = a.process_mesh_generated_mesh
+        self.process_mesh_generated_materials = a.proces_mesh_generated_materials
+        self.fem_main_input_template = a.fem_main_input_template
+        self.fem_main_sh_template = a.default_fem_main_sh_template
+        self.fem_main_log_template = a.default_fem_main_log_template
+        self.fem_main_exe = a.fem_main_exe_fname
+        self.fem_main_local_input_template = a.fem_main_input_template
+        self.fem_main_remote_input_template = a.fem_main_remote_input_template
+        self.fem_main_results_template = a.fem_main_results_template
+        self.fem_main_task_name_template = a.fem_main_remote_task_name_template
+        self.completion_delay = 10#a.default_completion_delay
+        self.cluster_home_dir = a.cluster_home_dir
+
+        try:
+            os.mkdir(local_wd)
+        except FileExistsError:
+            pass
+        try:
+            os.mkdir('{0}/{1}'.format(local_wd, geo_subdir))
+        except FileExistsError:
+            pass
+        try:
+            os.mkdir('{0}/{1}'.format(local_wd, files_subdir))
+        except FileExistsError:
+            pass
 
         # prepare folders on cluster
         self.ssh = paramiko.SSHClient()
@@ -93,14 +102,14 @@ class RemoteTaskConsecutiveTernaryMc:
             key_filename=ClusterSettingsKiae().key
         )
         sftp = self.ssh.open_sftp()
+        self.cluster_main_dir = a.cluster_main_dir
         sftp.chdir(self.cluster_main_dir)
         if self.remote_wd not in sftp.listdir():
             sftp.mkdir(self.remote_wd)
-            sftp.mkdir('{0}/libs'.format(self.remote_wd))
-        if 'libs' not in sftp.listdir('{0}/{1}'.format(
+        if  self.libs not in sftp.listdir('{0}/{1}'.format(
                 self.cluster_main_dir, self.remote_wd)):
-            sftp.mkdir('{0}/libs'.format(self.remote_wd))
-        for fname in self.required_fnames:
+            sftp.mkdir('{0}/{1}'.format(self.remote_wd, self.libs))
+        for fname in a.required_fnames:
             if fname not in sftp.listdir('{0}/{1}'.format(
                     self.cluster_main_dir, self.remote_wd)):
                 cp_fname_command =  'cp {0}/{1}/{2} {0}/{3}/{2}'.format(
@@ -108,198 +117,183 @@ class RemoteTaskConsecutiveTernaryMc:
                     self.remote_wd)
                 self.ssh.exec_command(cp_fname_command)
         for lib in self.libs:
-            if lib not in sftp.listdir('{0}/{1}/libs'.format(
-                    self.cluster_main_dir, self.remote_wd)):
-                cp_lib_command = 'cp {0}/{1}/libs/{2} {0}/{3}/libs/{2}'.format(
-                    self.cluster_main_dir, self.cluster_donor_dir, lib,
-                    self.remote_wd)
+            if lib not in sftp.listdir('{0}/{1}/{2}'.format(
+                    self.cluster_main_dir, self.remote_wd, self.libs)):
+                cp_lib_command = 'cp {0}/{1}/{4}/{2} {0}/{3}/{4}/{2}'.format(
+                    self.cluster_main_dir, a.cluster_donor_dir, lib,
+                    self.remote_wd, self.libs)
                 self.ssh.exec_command(cp_lib_command)
 
-    def single_loop(self, disks_number):
+        # preapre sh options
+        full_cluster_wd = '{0}/{1}'.format(self.cluster_main_dir, self.remote_wd)
+        self.gen_mesh_options = a.sbatch_constant_options
+        self.process_mesh_options = a.sbatch_constant_options
+        self.fem_main_options = a.sbatch_constant_options
+        for key in ('-n', '--cpus-per-task', '-t'):
+            self.gen_mesh_options[key] = a.sbatch_changing_options[key]['gen_mesh']
+            self.process_mesh_options[key] = (
+                a.sbatch_changing_options[key]['gen_mesh'])
+            self.fem_main_options[key] = (
+                a.sbatch_changing_options[key]['fem_main'])
+        self.gen_mesh_options['-D'] = full_cluster_wd
+        self.process_mesh_options['-D'] = full_cluster_wd
+        self.fem_main_options['-D'] = full_cluster_wd
+
+    def single_loop(self, N):
         time_tag = str(int(time.time()))
         log_entry = dict()
+        files_subdir = '{0}/{1}'.format(self.local_wd, self.files_subdir)
+        geo_subdir = '{0}/{1}'.format(self.local_wd, self.geo_subdir)
 
         # structure
-        structure_log_fname = '{0}/{1}/{2}'.format(
-            self.local_wd, self.files_dir,
-            '{0}_structure_log'.format(time_tag))
-        settings_fname = '{0}/{1}/{2}'.format(
-            self.local_wd, self.files_dir,
-            '{0}_structure_settings'.format(time_tag))
-        geo_fname = '{0}/{1}/{2}.geo'.format(
-            self.local_wd, self.geo_dir, time_tag)
-        stdout_fname =  '{0}/{1}/{2}'.format(
-            self.local_wd, self.files_dir,
-            '{0}_structure_stdout'.format(time_tag))
-        stderr_fname =  '{0}/{1}/{2}'.format(
-            self.local_wd, self.files_dir,
-            '{0}_structure_stderr'.format(time_tag))
-        try_make_ternary_structure_mc(
-            structure_log_fname, settings_fname, geo_fname,
-            self.ar, self.tau, self.Lr, self.max_attempts,
-            disks_number,
-            disk_thickness=self.disk_thickness,
-            vertices_number=self.vertices_number,
-            stdout_exe=stdout_fname, stderr_exe=stderr_fname,
-            structure_exe=self.structure_exe)
-        structure_data = process_structure_log(structure_log_fname)
-        geo_template = '{0}/{1}/{2}_N_{3}_Lr_{4}_ar_{5}.geo'
-        new_geo_fname = geo_template.format(self.local_wd, self.geo_dir,
-            time_tag, structure_data['N_real'], self.Lr, self.ar)
+        structure_log = self.structure_log_template.format(files_subdir, time_tag)
+        structure_settings = self.structure_settings_template.format(
+            files_subdir, time_tag)
+        geo_fname = self.structure_geo_fname_template.format(geo_subdir, time_tag)
+        structure_stdout =  self.structure_stdout_template.format(
+            files_subdir, time_tag)
+        structure_stderr = self.structure_stderr_template.format(
+            files_subdir, time_tag)
+        if not try_make_ternary_structure_mc(
+                structure_log, structure_settings, geo_fname,
+                self.ar, self.tau, self.Lr, self.max_attempts, N,
+                self.disk_thickness, self.vertices_number, self.structure_exe,
+                stdout=structure_stdout, stderr=structure_stderr):
+            print('  failed to create structure')
+            try_remove_files(structure_log, structure_settings,
+                structure_stdout, structure_stderr, geo_fname)
+            return False
+        structure_data = process_structure_log(structure_log)
+        new_geo_fname = self.structure_new_geo_fname_template.format(
+            geo_subdir, time_tag, structure_data['N_real'], self.Lr, self.ar,
+            self.tau)
         shutil.move(geo_fname, new_geo_fname)
+        try_remove_files(structure_log, structure_settings,
+                structure_stdout, structure_stderr)
         geo_fname = new_geo_fname
-        os.remove(stdout_fname)
-        os.remove(stderr_fname)
-        print('  structure done', time.asctime())
+        del new_geo_fname
+        del structure_log
+        del structure_settings
+        del structure_stdout
+        del structure_stderr
+        print('  structure done')
 
         # cluster, create inputs:
-        cic = ClusterInputsCreator(cluster_wd='{0}/{1}'.format(
-            self.cluster_main_dir, self.remote_wd))
-        fem_gen_sh = '{0}/{1}/fem_gen.sh'.format(
-            self.local_wd, self.files_dir, time_tag)
-        process_mesh_sh = '{0}/{1}/process_mesh.sh'.format(
-            self.local_wd, self.files_dir, time_tag)
-        fem_main_sh = {
-            'XX': '{0}/{1}/fem_main_XX.sh'.format(
-                self.local_wd, self.files_dir, time_tag),
-            'YY': '{0}/{1}/fem_main_YY.sh'.format(
-                self.local_wd, self.files_dir, time_tag),
-            'ZZ': '{0}/{1}/fem_main_ZZ.sh'.format(
-                self.local_wd, self.files_dir, time_tag),
+        full_cluster_wd = '{0}/{1}'.format(self.cluster_main_dir, self.remote_wd)
+        cic = ClusterInputsCreator(
+            cluster_wd='{0}/{1}/{2}'.format(
+                self.cluster_main_dir, self.files_subdir, self.remote_wd),
+            structure='binary')
+        gen_mesh_local_sh = '{0}/{1}/{2}'.format(
+            self.local_wd,  self.files_subdir, self.gen_mesh_sh)
+        gen_mesh_remote_sh = '{0}/{1}'.format(
+            self.cluster_home_dir, self.gen_mesh_sh)
+        process_mesh_local_sh = '{0}/{1}/{2}'.format(
+            self.local_wd,  self.files_subdir, self.process_mesh_sh)
+        process_mesh_remote_sh = '{0}/{1}'.format(
+            self.cluster_home_dir, self.process_mesh_sh)
+        fem_main_local_shs = {
+            axis: '{0}/{1}/{2}'.format(
+                self.local_wd, self.files_subdir,
+                self.fem_main_sh_template.format(axis))
+            for axis in ['XX', 'YY', 'ZZ']
         }
-        cic.create_fem_gen_sh(fem_gen_sh, params='{0} 0.15 2 2'.format(
-            self.remote_geo_fname))
-        cic.create_process_mesh_sh(process_mesh_sh)
-        fem_input_template_fname = 'input_{0}'
-        fem_input_template = '{0}/{1}/{2}_{3}'.format(
-            self.local_wd, self.files_dir, time_tag, fem_input_template_fname)
+        fem_main_remote_shs = {
+            axis: '{0}/{1}'.format(
+                self.cluster_home_dir, self.fem_main_sh_template.format(axis))
+            for axis in ['XX', 'YY', 'ZZ']
+        }
+        fem_main_local_inputs = {
+            axis: self.fem_main_local_input_template.format(
+                files_subdir, time_tag, axis)
+            for axis in ['XX', 'YY', 'ZZ']
+        }
+        fem_main_remote_inputs = {
+            axis: self.fem_main_remote_input_template.format(time_tag, axis)
+            for axis in ['XX', 'YY', 'ZZ']
+        }
+        fem_main_task_names = {
+            axis: self.fem_main_task_name_template.format(time_tag, axis)
+            for axis in ['XX', 'YY', 'ZZ']
+        }
+        fem_main_results_names = {
+            axis: '{0}_results.txt'.format(
+                self.fem_main_task_name_template.format(time_tag, axis))
+            for axis in ['XX', 'YY', 'ZZ']
+        }
+        fem_main_log_names = {
+            axis: '{0}_log.txt'.format(
+                self.fem_main_task_name_template.format(time_tag, axis))
+            for axis in ['XX', 'YY', 'ZZ']
+        }
+        fem_main_local_results_names = {
+            axis: '{0}/{1}_results_{2}.txt'.format(files_subdir, time_tag, axis)
+            for axis in ['XX', 'YY', 'ZZ']
+        }
+
+        # gen_mesh
+        cic.create_sh(
+            local_sh=gen_mesh_local_sh,
+            log=self.gen_mesh_log,
+            exe=self.gen_mesh_exe,
+            argv=[self.remote_geo_fname, *self.meshing_parameters],
+            sbatch_options=self.gen_mesh_options)
+
+        # process_mesh
+        cic.create_sh(
+            local_sh=process_mesh_local_sh,
+            log=self.process_mesh_log,
+            exe=self.process_mesh_exe,
+            argv=[],
+            sbatch_options=self.process_mesh_options)
+
+        # fem_main
         for axis in ['XX', 'YY', 'ZZ']:
-            local_script_fname = fem_input_template.format(axis)
-            remote_script_name = 'input_ternary_{0}'.format(axis)
+            cic.create_sh(
+                local_sh=fem_main_local_shs[axis],
+                log=fem_main_log_names[axis],
+                exe=self.fem_main_exe,
+                argv=[fem_main_remote_inputs[axis]],
+                sbatch_options=self.fem_main_options)
             create_fem_input(
                 Lx=self.ar/2 * self.disk_thickness * self.Lr,
                 moduli=self.moduli,
-                input_fname=local_script_fname,
+                input_fname=fem_main_local_inputs[axis],
                 axis=axis,
-                task_name_template=self.task_name_template,
-                mesh_fname='mesh.xdr',
-                materials_fname='materials.bin')
-            cic.create_fem_main_sh(
-                sh_name=fem_main_sh[axis],
-                axis=axis,
-                fem_input_script=remote_script_name,
-                fem_main_short_name='FEManton2.o')
+                task_name=fem_main_task_names[axis],
+                mesh_fname=self.process_mesh_generated_mesh,
+                materials_fname=self.process_mesh_generated_materials)
 
-        # cluster, copy files
+        # fem, copy local files to cluster
         sftp = self.ssh.open_sftp()
-        sftp.put(geo_fname, '{0}/{1}/{2}'.format(
-            self.cluster_main_dir, self.remote_wd, self.remote_geo_fname))
-        sftp.put(fem_gen_sh, '{0}/fem_gen.sh'.format(self.cluster_home_dir))
-        sftp.put(process_mesh_sh, '{0}/fem_process.sh'.format(
-            self.cluster_home_dir))
+        sftp.chdir(full_cluster_wd)
+        sftp.put(geo_fname, self.remote_geo_fname)
+        sftp.put(gen_mesh_local_sh, gen_mesh_remote_sh)
+        sftp.put(process_mesh_local_sh, process_mesh_remote_sh)
         for axis in ['XX', 'YY', 'ZZ']:
-            sftp.put(fem_main_sh[axis], '{0}/fem_main_{1}.sh'.format(
-                self.cluster_home_dir, axis))
-            sftp.put(
-                fem_input_template.format(axis),
-                '{0}/{1}/input_ternary_{2}'.format(
-                    self.cluster_main_dir, self.remote_wd, axis))
+            sftp.put(fem_main_local_shs[axis], fem_main_remote_shs[axis])
+            sftp.put(fem_main_local_inputs[axis], fem_main_remote_inputs[axis])
 
-        # cluster, set and wait fem_gen
-        command = '; '.join([
-            'export LD_LIBRARY_PATH=libs',
-            'sbatch fem_gen.sh'
-        ])
-        stdin, stdout, stderr = self.ssh.exec_command(command)
-        task_id = stdout.readlines()[0].split()[-1]
-        stdin, stdout, stderr = self.ssh.exec_command(
-            'squeue --user=antonsk -o "%.10i %.50j %.2t %.10M %.50Z"')
-        while True:
-            tasks = {
-                task_line.split()[0]: {
-                    'task_name': task_line.split()[1],
-                    'state': task_line.split()[2],
-                    'running_time': task_line.split()[3],
-                    'wd': task_line.split()[4]
-                } for task_line in stdout.readlines()[1:]
-            }
-            if task_id not in tasks.keys():
-                break
-            time.sleep(1)
-        time.sleep(self.completion_delay) # 'generated.vol' writing
-        if 'generated.vol' in sftp.listdir('{0}/{1}'.format(
-                self.cluster_main_dir, self.remote_wd)):
-            command = 'mv {0}/{1}/generated.vol {0}/{1}/out.mesh'.format(
-                self.cluster_main_dir, self.remote_wd)
-            self.ssh.exec_command(command)
-        else:
-            print('gen_mesh failed')
-            pprint(sftp.listdir('{0}/{1}'.format(
-                self.cluster_main_dir, self.remote_wd)))
-            return False
-        self.ssh.exec_command('rm {0}/{1}/{2}.err'.format(
-            self.cluster_main_dir, self.remote_wd, task_id))
-        self.ssh.exec_command('rm {0}/{1}/{2}.out'.format(
-            self.cluster_main_dir, self.remote_wd, task_id))
-        self.ssh.exec_command('rm {0}/{1}/generated.vol'.format(
-            self.cluster_main_dir, self.remote_wd))
-        self.ssh.exec_command('rm {0}/{1}/log_gen_mesh'.format(
-            self.cluster_main_dir, self.remote_wd))
-        self.ssh.exec_command('rm {0}/{1}/{2}'.format(
-            self.cluster_main_dir, self.remote_wd, self.remote_geo_fname))
-        print('  fem_gen done', time.asctime())
-
-        # cluster, set and wait processMesh
-        command = '; '.join([
-            'export LD_LIBRARY_PATH=libs',
-            'sbatch fem_process.sh'
-        ])
-        stdin, stdout, stderr = self.ssh.exec_command(command)
-        task_id = stdout.readlines()[0].split()[-1]
-        stdin, stdout, stderr = self.ssh.exec_command(
-            'squeue --user=antonsk -o "%.10i %.50j %.2t %.10M %.50Z"')
-        while True:
-            tasks = {
-                task_line.split()[0]: {
-                    'task_name': task_line.split()[1],
-                    'state': task_line.split()[2],
-                    'running_time': task_line.split()[3],
-                    'wd': task_line.split()[4]
-                } for task_line in stdout.readlines()[1:]
-            }
-            if task_id not in tasks.keys():
-                break
-            time.sleep(1)
-        time.sleep(self.completion_delay) # 'mesh.xdr' writing
-        if 'mesh.xdr' in sftp.listdir('{0}/{1}'.format(
-                self.cluster_main_dir, self.remote_wd)):
-            pass
-        else:
-            print('process_mesh failed')
-            pprint(sftp.listdir('{0}/{1}'.format(
-                self.cluster_main_dir, self.remote_wd)))
-            return False
-        self.ssh.exec_command('rm {0}/{1}/{2}.err'.format(
-            self.cluster_main_dir, self.remote_wd, task_id))
-        self.ssh.exec_command('rm {0}/{1}/{2}.out'.format(
-            self.cluster_main_dir, self.remote_wd, task_id))
-        self.ssh.exec_command('rm {0}/{1}/out.mesh'.format(
-            self.cluster_main_dir, self.remote_wd))
-        self.ssh.exec_command('rm {0}/{1}/log_process_mesh'.format(
-            self.cluster_main_dir, self.remote_wd))
-        print('  process_mesh done', time.asctime())
-        
-        # cluster, set and wait fem_main
-        for axis in ['XX', 'YY', 'ZZ']:
-            command = '; '.join([
-                'export LD_LIBRARY_PATH=libs',
-                'sbatch fem_main_{0}.sh'.format(axis)
-            ])
-            stdin, stdout, stderr = self.ssh.exec_command(command)
+        # fem, set and wait gen_mesh on cluster
+        export_command = 'export LD_LIBRARY_PATH={0};'.format(self.libs)
+        squeue_command = 'squeue --user=antonsk -o "%.10i %.50j %.2t %.10M %.50Z"'
+        mv_command = 'mv {0}/{1} {0}/{2}'.format(
+            full_cluster_wd,
+            self.gen_mesh_generated_mesh,
+            self.process_mesh_input_mesh)
+        gen_mesh_command = ' '.join([
+            export_command,
+            'sbatch', gen_mesh_remote_sh])
+        stdin, stdout, stderr = self.ssh.exec_command(gen_mesh_command)
+        try:
             task_id = stdout.readlines()[0].split()[-1]
-            stdin, stdout, stderr = self.ssh.exec_command(
-                'squeue --user=antonsk -o "%.10i %.50j %.2t %.10M %.50Z"')
-            while True:
+            print('  gen_mesh id', task_id)
+        except IndexError:
+            print('  gen_mesh failed to start')
+            return False
+        while True:
+            stdin, stdout, stderr = self.ssh.exec_command(squeue_command)
+            try:
                 tasks = {
                     task_line.split()[0]: {
                         'task_name': task_line.split()[1],
@@ -308,124 +302,168 @@ class RemoteTaskConsecutiveTernaryMc:
                         'wd': task_line.split()[4]
                     } for task_line in stdout.readlines()[1:]
                 }
+            except IndexError:
+                print('  {0} failed to start'.format(current_sh))
+                return False
+            if task_id not in tasks.keys():
+                break
+            time.sleep(1)
+        time.sleep(self.completion_delay) # 'generated.vol' writing
+        sftp.remove('{0}.err'.format(task_id))
+        sftp.remove('{0}.out'.format(task_id))
+        sftp.remove(self.gen_mesh_log)
+        sftp.remove(self.remote_geo_fname)
+        if self.gen_mesh_generated_mesh in sftp.listdir():
+            self.ssh.exec_command(mv_command)
+        else:
+            print('gen_mesh failed')
+            return False
+        print('  fem_gen done', time.asctime())
+
+        # fem, set and wait processMesh on cluster
+        process_mesh_command = ' '.join([
+            export_command, 'sbatch', process_mesh_remote_sh])
+        stdin, stdout, stderr = self.ssh.exec_command(process_mesh_command)
+        try:
+            task_id = stdout.readlines()[0].split()[-1]
+        except IndexError:
+            print('  process_mesh failed to start')
+            return False
+        while True:
+            stdin, stdout, stderr = self.ssh.exec_command(squeue_command)
+            try:
+                tasks = {
+                    task_line.split()[0]: {
+                        'task_name': task_line.split()[1],
+                        'state': task_line.split()[2],
+                        'running_time': task_line.split()[3],
+                        'wd': task_line.split()[4]
+                    } for task_line in stdout.readlines()[1:]
+                 }
+            except IndexError:
+                print('  process_mesh.sh failed to start')
+                return False
+            if task_id not in tasks.keys():
+                break
+            time.sleep(1)
+        time.sleep(self.completion_delay) # 'mesh.xdr' writing
+        sftp.remove('{0}.err'.format(task_id))
+        sftp.remove('{0}.out'.format(task_id))
+        sftp.remove(self.process_mesh_log)
+        if self.process_mesh_input_mesh in sftp.listdir():
+            sftp.remove(self.process_mesh_input_mesh)
+        else:
+            print('process_mesh failed')
+            return False
+        print('  process_mesh done', time.asctime())
+        
+        for axis in ['XX', 'YY', 'ZZ']:
+            # fem, set and wait fem_main on cluster
+            fem_main_command = ' '.join([
+                export_command, 'sbatch', fem_main_remote_shs[axis]])
+            stdin, stdout, stderr = self.ssh.exec_command(fem_main_command)
+            try:
+                task_id = stdout.readlines()[0].split()[-1]
+            except IndexError:
+                print('  fem_main failed to start')
+                return False
+            while True:
+                stdin, stdout, stderr = self.ssh.exec_command(squeue_command)
+                try:
+                    tasks = {
+                        task_line.split()[0]: {
+                            'task_name': task_line.split()[1],
+                            'state': task_line.split()[2],
+                            'running_time': task_line.split()[3],
+                            'wd': task_line.split()[4]
+                        } for task_line in stdout.readlines()[1:]
+                    }
+                except IndexError:
+                    print('  fem_main.sh failed to start')
+                    return False
                 if task_id not in tasks.keys():
                     break
                 time.sleep(1)
             time.sleep(self.completion_delay) # fem_main output writing
-            results_fname = '{0}{1}_results.txt'.format(self.task_name_template,
-                axis)
-            log_fname = '{0}{1}_log.txt'.format(self.task_name_template,
-                axis)
-            if results_fname in sftp.listdir('{0}/{1}'.format(
-                    self.cluster_main_dir, self.remote_wd)):
+
+            print(fem_main_log_names[axis])
+            sftp.remove(fem_main_log_names[axis])
+            sftp.remove('{0}.out'.format(task_id))
+            sftp.remove('{0}.err'.format(task_id))
+            sftp.remove(fem_main_remote_inputs[axis])
+            sftp.remove('stresses.txt')
+            if fem_main_results_names[axis] in sftp.listdir():
                 sftp.get(
-                    '{0}/{1}/{2}'.format(
-                        self.cluster_main_dir, self.remote_wd, results_fname),
-                    '{0}/{1}/{2}'.format(
-                        self.local_wd, self.files_dir, results_fname))
+                    fem_main_results_names[axis],
+                    fem_main_local_results_names[axis])
+                sftp.remove(fem_main_results_names[axis])
             else:
                 print('fem_main along {0} failed'.format(axis))
-                pprint(sftp.listdir('{0}/{1}'.format(
-                    self.cluster_main_dir, self.remote_wd)))
                 return False
-            self.ssh.exec_command('rm {0}/{1}/{2}'.format(
-                self.cluster_main_dir, self.remote_wd, results_fname))
-            self.ssh.exec_command('rm {0}/{1}/{2}'.format(
-                self.cluster_main_dir, self.remote_wd, log_fname))
-            self.ssh.exec_command('rm {0}/{1}/{2}.err'.format(
-                self.cluster_main_dir, self.remote_wd, task_id))
-            self.ssh.exec_command('rm {0}/{1}/{2}.out'.format(
-                self.cluster_main_dir, self.remote_wd, task_id))
-            self.ssh.exec_command('rm {0}/{1}/input_ternary_{2}'.format(
-                self.cluster_main_dir, self.remote_wd, axis))
-            self.ssh.exec_command('rm {0}/{1}/log_fem_main_{2}'.format(
-                self.cluster_main_dir, self.remote_wd, axis))
-            self.ssh.exec_command('rm {0}/{1}/stresses.txt'.format(
-                self.cluster_main_dir, self.remote_wd))
 
-            # log
+            # logging
             fem_data = get_fem_main_results(
-                '{0}/{1}/{2}'.format(
-                    self.local_wd, self.files_dir, results_fname),
+                fem_main_local_results_names[axis],
                 axis=axis)
-            perc = [
-                structure_data['perc_x'],
-                structure_data['perc_y'],
-                structure_data['perc_z']
-            ][('XX', 'YY', 'ZZ').index(axis)]
             new_results_json_entry = {
                 'time_tag': time_tag,
                 'ar': self.ar,
-                'tau': self.tau,
                 'Lr': self.Lr,
+                'tau': self.tau,
                 'N': structure_data['N_real'],
                 'axis': axis,
-                'perc': perc,
                 'fi': fem_data['fi_filler'],
                 'E': fem_data['E'],
                 'Ef': self.moduli[0],
-                'Ei': self.moduli[1],
                 'Em': self.moduli[1],
             }
-
             results_ready = []
+            json_name = '{0}/{1}'.format(self.local_wd, self.results_json)
             if self.results_json in os.listdir(self.local_wd):
-                with open('{0}/{1}'.format(self.local_wd, self.results_json)) as f:
+                with open(json_name) as f:
                     try:
                         results_ready = json.load(f)
                     except json.decoder.JSONDecodeError:
                         pass
             results_ready.append(new_results_json_entry)
-            with open('{0}/{1}'.format(self.local_wd, self.results_json), 'w') as f:
+            with open(json_name, 'w') as f:
                 json.dump(results_ready, f, indent=4)
             print('  fem main done along', axis, time.asctime())
-
-        # clean remote files
-        self.ssh.exec_command('rm {0}/{1}/mesh.xdr'.format(
-            self.cluster_main_dir, self.remote_wd))
-        self.ssh.exec_command('rm {0}/{1}/materials.bin'.format(
-            self.cluster_main_dir, self.remote_wd))
-
-        # clean local files
-        os.remove(structure_log_fname)
-        os.remove(settings_fname)
-        os.remove(fem_gen_sh)
-        os.remove(process_mesh_sh)
-        os.remove(fem_main_sh['XX'])
-        os.remove(fem_main_sh['YY'])
-        os.remove(fem_main_sh['ZZ'])
+        # clean remote directory
+        sftp.remove(self.process_mesh_generated_mesh)
+        sftp.remove(self.process_mesh_generated_materials)
+        # clean local directory
+        os.remove(gen_mesh_local_sh)
+        os.remove(process_mesh_local_sh)
         for axis in ['XX', 'YY', 'ZZ']:
-            local_script_fname = fem_input_template.format(axis)
-            os.remove(local_script_fname)
-            results_fname = '{0}{1}_results.txt'.format(
-                self.task_name_template, axis)
-            shutil.move(
-               '{0}/{1}/{2}'.format(self.local_wd, self.files_dir, results_fname),
-               '{0}/{1}/{2}_ternary_remote_{3}'.format(
-                   self.local_wd, self.files_dir, time_tag, results_fname))
+            os.remove(fem_main_local_shs[axis])
+            os.remove(fem_main_local_inputs[axis])
         return True
 
     def run(self):
-        disks_number = 1
+        N = 1
         consecutive_fails = 0
+        print('\nstart looping')
         while consecutive_fails < 3:
-            code = self.single_loop(disks_number)
+            print('trying', N, 'disks')
+            code = self.single_loop(N)
             if code:
-                print(disks_number, '+')
-                disks_number += 1
+                print('+')
+                N += 1
             else:
+                print('-')
                 consecutive_fails += 1
-
+            break
 
 if __name__ == '__main__':
     ar = 5
     Lr = 5
     tau = 1
-    local_wd = 'remote_ternary_Lr_{0}_ar_{1}_tau_{2}'.format(Lr, ar, tau)
+    local_wd = 'remote_ternary_Lr_{0}_ar_{1}'.format(Lr, ar)
     remote_wd = 'FEM_newdev3_0'
     max_attempts = 100
     moduli = [232, 4, 1.5]
-    results_json = 'ternary_Lr_{0}_ar_{1}_tau_{2}.json'.format(Lr, ar, tau)
+    results_json = 'binary_Lr_{0}_ar_{1}.json'.format(Lr, ar)
 
     t = RemoteTaskConsecutiveTernaryMc(
         local_wd=local_wd, remote_wd=remote_wd,

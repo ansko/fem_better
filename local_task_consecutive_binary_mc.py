@@ -1,153 +1,215 @@
 import json
 import os
+import resource
 import shutil
+import subprocess
 import time
 
 import pprint
 pprint=pprint.PrettyPrinter(indent=4).pprint
 
+from all_possible_options import APO
 from fem.create_fem_input import create_fem_input
 from fem.get_fem_main_results import get_fem_main_results
-from fem.run_fem_main_ternary_exe import run_fem_main_ternary_exe
-from fem.run_gen_mesh_exe import run_gen_mesh_exe
-from fem.run_process_mesh_exe import run_process_mesh_exe
-
 from structure.process_structure_log import process_structure_log
 from structure.try_make_binary_structure_mc import try_make_binary_structure_mc
+from try_remove_files import try_remove_files
 
 
 class LocalTaskConsecutiveBinaryMc:
     """
-    Task where ar, tau, Lr are fixed while disks number increases
+    Binary task where ar, tau, Lr are fixed while disks number increases
 
     """
-    disk_thickness = 0.1
-    vertices_number = 6
-    structure_exe = './structure/binary_mc'
-    gen_mesh_exe='/home/anton/FEMFolder/gen_mesh.x'
-    process_mesh_exe='/home/anton/FEMFolder/processMesh.x'
-    fem_main_ternary_exe='/home/anton/FEMFolder/FEManton2.o'
-    libs = '/home/anton/FEMFolder/libs'
-    my_libs = '/home/anton/FEMFolder/my_libs'
-    task_name_template = 'E_binary_local'
-
-    def __init__(self, wd,
-            ar, Lr,
-            max_attempts,
+    def __init__(self,
+            local_wd,
+            ar, Lr, max_attempts,
             moduli,
-            results_json,
-            geo_dir='geo', files_dir='files'):
-        try:
-            os.mkdir(wd)
-            os.mkdir('{0}/{1}'.format(wd, geo_dir))
-            os.mkdir('{0}/{1}'.format(wd, files_dir))
-        except FileExistsError:
-            pass
-        self.wd = wd
-        self.geo_dir = geo_dir
-        self.files_dir = files_dir
+            results_json, # full name is local_wd/results_json
+            geo_subdir='geo', files_subdir='files'):
+
+        self.local_wd = local_wd
+        self.geo_subdir = geo_subdir
+        self.files_subdir = files_subdir
         self.ar = ar
         self.Lr = Lr
         self.max_attempts = max_attempts
         self.moduli = moduli
         self.results_json = results_json
 
-    def single_loop(self, disks_number):
+        a = APO(type(self).__name__, local_wd=local_wd)
+
+        self.disk_thickness = a.th
+        self.vertices_number = a.vertices_number
+        self.structure_exe = a.structure_exe
+        self.gen_mesh_exe= a.gen_mesh_exe
+        self.process_mesh_exe = a.process_mesh_exe
+        self.fem_main_exe = a.fem_main_exe
+        self.structure_log_template = a.structure_log_template
+        self.structure_settings_template = a.structure_settings_template
+        self.structure_geo_fname_template = a.structure_geo_fname_template
+        self.structure_stdout_template = a.structure_stdout_template
+        self.structure_stderr_template = a.structure_stderr_template
+        self.structure_new_geo_fname_template = a.structure_new_geo_fname_template
+        self.fem_dir = a.fem_dir
+        self.libs = a.libs
+        self.my_libs = a.my_libs
+        self.meshing_parameters = a.meshing_parameters
+        self.fem_gen_stdout_template = a.fem_gen_stdout_template
+        self.fem_gen_stderr_template = a.fem_gen_stderr_template
+        self.gen_mesh_success = a.gen_mesh_success
+        self.gen_mesh_generated_mesh = a.gen_mesh_generated_mesh
+        self.process_mesh_input_mesh = a.process_mesh_input_mesh
+        self.process_mesh_stdout_template = a.process_mesh_stdout_template
+        self.process_mesh_stderr_template = a.process_mesh_stderr_template
+        self.process_mesh_memory_limit = a.process_mesh_memory_limit
+        self.process_mesh_success = a.process_mesh_success
+        self.process_mesh_generated_mesh = a.process_mesh_generated_mesh
+        self.proces_mesh_generated_materials = a.proces_mesh_generated_materials
+        self.fem_main_input_template = a.fem_main_input_template
+        self.fem_main_stderr_template = a.fem_main_stderr_template
+        self.fem_main_stdout_template = a.fem_main_stdout_template
+        self.fem_main_results_template = a.fem_main_results_template
+        self.fem_main_task_name_template = a.fem_main_local_task_name_template
+        self.fem_main_success = a.fem_main_success
+
+        # create folder structure
+        try:
+            os.mkdir(local_wd)
+        except FileExistsError:
+            pass
+        try:
+            os.mkdir('{0}/{1}'.format(local_wd, files_subdir))
+        except FileExistsError:
+            pass
+        try:
+            os.mkdir('{0}/{1}'.format(local_wd, geo_subdir))
+        except FileExistsError:
+            pass
+        self.local_wd = '{0}/{1}'.format(os.getcwd(), self.local_wd)
+
+    def single_loop(self, N):
         time_tag = str(int(time.time()))
         log_entry = dict()
+        files_subdir = '{0}/{1}'.format(self.local_wd, self.files_subdir)
+        geo_subdir = '{0}/{1}'.format(self.local_wd, self.geo_subdir)
 
         # structure
-        log_fname = '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_structure_log'.format(time_tag))
-        settings_fname = '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_structure_settings'.format(time_tag))
-        geo_fname = '{0}/{1}/{2}.geo'.format(
-            self.wd, self.geo_dir, time_tag)
-        stdout_fname =  '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_structure_stdout'.format(time_tag))
-        stderr_fname =  '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_structure_stderr'.format(time_tag))
-        try_make_binary_structure_mc(
-            log_fname, settings_fname, geo_fname,
-            self.ar, self.Lr, self.max_attempts,
-            disks_number,
-            disk_thickness=self.disk_thickness,
-            vertices_number=self.vertices_number,
-            stdout_exe=stdout_fname, stderr_exe=stderr_fname,
-            structure_exe=self.structure_exe)
-        structure_data = process_structure_log(log_fname)
-        geo_template = '{0}/{1}/{2}_N_{3}_Lr_{4}_ar_{5}.geo'
-        new_geo_fname = geo_template.format(self.wd, self.geo_dir,
-            time_tag, structure_data['N_real'], self.Lr, self.ar)
+        structure_log = self.structure_log_template.format(files_subdir, time_tag)
+        structure_settings = self.structure_settings_template.format(
+            files_subdir, time_tag)
+        geo_fname = self.structure_geo_fname_template.format(geo_subdir, time_tag)
+        structure_stdout =  self.structure_stdout_template.format(
+            files_subdir, time_tag)
+        structure_stderr = self.structure_stderr_template.format(
+            files_subdir, time_tag)
+        if not try_make_binary_structure_mc(
+                structure_log, structure_settings, geo_fname,
+                self.ar, self.Lr, self.max_attempts, N,
+                self.disk_thickness, self.vertices_number, self.structure_exe,
+                stdout=structure_stdout, stderr=structure_stderr):
+            print('  failed to create structure')
+            try_remove_files(structure_log, structure_settings,
+                structure_stdout, structure_stderr, geo_fname)
+            return False
+        structure_data = process_structure_log(structure_log)
+        new_geo_fname = self.structure_new_geo_fname_template.format(
+            geo_subdir, time_tag, structure_data['N_real'], self.Lr, self.ar)
         shutil.move(geo_fname, new_geo_fname)
+        try_remove_files(structure_log, structure_settings,
+                structure_stdout, structure_stderr)
         geo_fname = new_geo_fname
-        os.remove(stdout_fname)
-        os.remove(stderr_fname)
+        del new_geo_fname
+        del structure_log
+        del structure_settings
+        del structure_stdout
+        del structure_stderr
         print('  structure done')
 
+        # fem
+        fem_env = os.environ
+        fem_env['LD_LIBRARY_PATH'] = '{0}/{1}:{0}/{2}'.format(
+                self.fem_dir, self.libs, self.my_libs)
+
         # fem, gen_mesh
-        fem_gen_out =  '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_gen_mesh_stdout'.format(time_tag))
-        fem_gen_err =  '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_gen_mesh_stderr'.format(time_tag))
-        run_gen_mesh_exe(geo_fname=geo_fname,
-            meshing_parameters=[0.15, 2, 2],
-            gen_mesh_exe=self.gen_mesh_exe,
-            libs=self.libs, my_libs=self.my_libs,
-            stdout_exe=fem_gen_out, stderr_exe=fem_gen_err)
-        os.remove(fem_gen_out)
-        os.remove(fem_gen_err)
+        meshing_parameters = [str(param) for param in self.meshing_parameters]
+        fem_gen_stdout = self.fem_gen_stdout_template.format(
+            files_subdir, time_tag)
+        fem_gen_stderr = self.fem_gen_stderr_template.format(
+            files_subdir, time_tag)
+        code = subprocess.call(
+            [self.gen_mesh_exe, geo_fname, *meshing_parameters],
+            env=fem_env,
+            cwd=self.local_wd,
+            stdout=open(fem_gen_stdout, 'w'),
+            stderr=open(fem_gen_stderr, 'w')) 
+        if code not in self.gen_mesh_success:
+            print('  failed to complete fem_gen:', code)
+            try_remove_files(fem_gen_stdout, fem_gen_stderr,
+                '{0}/{1}'.format(self.local_wd, self.gen_mesh_generated_mesh))
+            return False
+        shutil.move(
+            '{0}/{1}'.format(self.local_wd, self.gen_mesh_generated_mesh),
+            '{0}/{1}'.format(self.local_wd, self.process_mesh_input_mesh))
+        try_remove_files(fem_gen_stdout, fem_gen_stderr)
+        del meshing_parameters
+        del fem_gen_stdout
+        del fem_gen_stderr
         print('  gen_mesh done')
 
         # fem, process_mesh
-        process_mesh_out =  '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_process_mesh_stdout'.format(time_tag))
-        process_mesh_err =  '{0}/{1}/{2}'.format(
-            self.wd, self.files_dir,
-            '{0}_process_mesh_stderr'.format(time_tag))
-        run_process_mesh_exe(
-            mesh_fname='generated.vol',
-            process_mesh_exe='/home/anton/FEMFolder/processMesh.x',
-            libs='/home/anton/FEMFolder/libs',
-            my_libs='/home/anton/FEMFolder/my_libs',
-            stdout_exe=process_mesh_out, stderr_exe=process_mesh_err,
-            memory_ratio=0.3)
-        os.remove(process_mesh_out)
-        os.remove(process_mesh_err)
+        process_mesh_stdout = self.process_mesh_stdout_template.format(
+            files_subdir, time_tag)
+        process_mesh_stderr = self.process_mesh_stderr_template.format(
+            files_subdir, time_tag)
+        code = subprocess.call(
+            self.process_mesh_exe,
+            env=fem_env,
+            cwd=self.local_wd,
+            preexec_fn=lambda: resource.setrlimit(
+                resource.RLIMIT_AS,
+                (self.process_mesh_memory_limit,
+                     self.process_mesh_memory_limit)),
+            stdout=open(process_mesh_stdout, 'w'),
+            stderr=open(process_mesh_stderr, 'w'))
+        if code not in self.process_mesh_success:
+            print('  failed to complete process_mesh:', code)
+            try_remove_files(process_mesh_stdout, process_mesh_stderr,
+                '{0}/{1}'.format(self.local_wd, self.process_mesh_input_mesh))
+            return False
+        try_remove_files(process_mesh_stdout, process_mesh_stderr,
+            '{0}/{1}'.format(self.local_wd, self.process_mesh_input_mesh))
         print('  process_mesh done')
 
-        # fem main
-        fem_input_template_fname = 'input_{0}'
-        fem_input_template = '{0}/{1}/{2}_{3}'.format(
-            self.wd, self.files_dir, time_tag, fem_input_template_fname)
+        # fem, fem_main
         for axis in ['XX', 'YY', 'ZZ']:
-            script_fname = fem_input_template.format(axis)
-            stdout_fname = '{0}/{1}/{2}_fem_main_{3}_out'.format(
-                self.wd, self.files_dir, time_tag, axis)
-            stderr_fname = '{0}/{1}/{2}_fem_main_{3}_err'.format(
-                self.wd, self.files_dir, time_tag, axis)
-            fem_main_results_fname = '{0}{1}_results.txt'.format(
-                self.task_name_template, axis)
+            fem_main_input = self.fem_main_input_template.format(
+                files_subdir, time_tag, axis)
+            fem_main_stdout = self.fem_main_stdout_template.format(
+                files_subdir, time_tag, axis)
+            fem_main_stderr = self.fem_main_stderr_template.format(
+                files_subdir, time_tag, axis)
+            fem_main_results_fname = self.fem_main_results_template.format(
+                files_subdir, time_tag, axis)
             create_fem_input(
                 Lx=self.ar/2 * self.disk_thickness * self.Lr,
                 moduli=self.moduli,
-                input_fname=script_fname,
+                input_fname=fem_main_input,
                 axis=axis,
-                task_name_template=self.task_name_template,
-                mesh_fname='mesh.xdr',
-                materials_fname='materials.bin')
-            run_fem_main_ternary_exe(
-                script_fname,
-                fem_main_ternary_exe=self.fem_main_ternary_exe,
-                libs=self.libs, my_libs=self.my_libs,
-                stdout_exe=stdout_fname, stderr_exe=stderr_fname)
+                task_name=self.fem_main_task_name_template.format(
+                    files_subdir, time_tag, axis),
+                mesh_fname=self.process_mesh_generated_mesh,
+                materials_fname=self.proces_mesh_generated_materials)
+            code = subprocess.call(
+                [self.fem_main_exe, fem_main_input],
+                env=fem_env,
+                cwd=self.local_wd,
+                stdout=open(fem_main_stdout, 'w'),
+                stderr=open(fem_main_stderr, 'w'))
+            if code not in self.fem_main_success:
+                print('  fem_main along {0} failed:'.format(axis), code)
+                try_remove_files(fem_main_stdout, fem_main_stderr, fem_main_input)
+                return False
             fem_data = get_fem_main_results(fem_main_results_fname, axis=axis)
             new_results_json_entry = {
                 'time_tag': time_tag,
@@ -160,57 +222,58 @@ class LocalTaskConsecutiveBinaryMc:
                 'Ef': self.moduli[0],
                 'Em': self.moduli[1],
             }
-            os.remove(stdout_fname)
-            os.remove(stderr_fname)
-            os.remove(script_fname)
-            shutil.move(fem_main_results_fname, '{0}/{1}/{2}_{3}'.format(
-                self.wd, self.files_dir, time_tag, fem_main_results_fname))
+            try_remove_files(fem_main_stdout, fem_main_stderr, fem_main_input)
 
             # output to .json:
             results_ready = []
-            if self.results_json in os.listdir(self.wd):
-                with open('{0}/{1}'.format(self.wd, self.results_json)) as f:
+            full_json_fname = '{0}/{1}'.format(self.local_wd, self.results_json)
+            if self.results_json in os.listdir(self.local_wd):
+                with open(full_json_fname) as f:
                     try:
                         results_ready = json.load(f)
                     except json.decoder.JSONDecodeError:
                         pass
             results_ready.append(new_results_json_entry)
-            with open('{0}/{1}'.format(self.wd, self.results_json), 'w') as f:
+            with open(full_json_fname, 'w') as f:
                 json.dump(results_ready, f, indent=4)
             print('  fem_main done on', axis)
+            del fem_main_input
+            del fem_main_stdout
+            del fem_main_stderr
+            del fem_main_results_fname
+            del fem_data
+            del new_results_json_entry
+            del results_ready
+            del full_json_fname
+
         return True
 
     def run(self):
-        disks_number = 1
+        N = 1
         consecutive_fails = 0
+        print('\nstart looping')
         while consecutive_fails < 3:
-            code = self.single_loop(disks_number)
+            print('trying', N, 'disks')
+            code = self.single_loop(N)
             if code:
-                print(disks_number, '+')
-                disks_number += 1
+                print('+')
+                N += 1
             else:
+                print('-')
                 consecutive_fails += 1
-
-            # clean-up after step finish
-            for fname in ['mesh.xdr', 'out.mesh', 'stresses.txt']:
-                if fname in os.listdir():
-                    os.remove(fname)
-            for axis in ['XX', 'YY', 'ZZ']:
-                fem_main_log = '{0}log.txt'.format(self.task_name_template)
-                if fem_main_log in os.listdir():
-                    os.remove(fem_main_log)
 
 
 if __name__ == '__main__':
     ar = 4
     Lr = 10
-    wd = 'binary_Lr_{0}_ar_{1}'.format(Lr, ar)
+    local_wd = 'local_binary_Lr_{0}_ar_{1}'.format(Lr, ar)
     max_attempts = 100
     moduli = [232, 1.5]
     results_json = 'binary_Lr_{0}_ar_{1}.json'.format(Lr, ar)
 
-    t = LocalTaskConsecutiveBinaryMc(wd=wd,
-        ar=ar, Lr=Lr,
-        max_attempts=max_attempts,
-        moduli=moduli, results_json=results_json)
+    t = LocalTaskConsecutiveBinaryMc(
+        local_wd=local_wd,
+        ar=ar, Lr=Lr, max_attempts=max_attempts,
+        moduli=moduli,
+        results_json=results_json)
     t.run()

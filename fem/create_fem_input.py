@@ -1,4 +1,4 @@
-def create_fem_input(Lx, moduli, input_fname, axis, task_name_template,
+def create_fem_input(Lx, moduli, input_fname, axis, task_name,
         mesh_fname='mesh.xdr', materials_fname='materials.bin'):
 
     """
@@ -13,8 +13,7 @@ def create_fem_input(Lx, moduli, input_fname, axis, task_name_template,
         axis                the axis along which the strain is applied; one of
                                 ['XX', 'YY', 'ZZ']
 
-        task_name_template  template used in output fname
-                                as ('{0}_{1}'.format(task_name, axis)
+        task_name           task name for output fname
         mesh_fname          the name of the mesh file (fixed in FEMMain)
         materials_fname     the name of the file with materials elastoc constants
                                 (fixed in FEMMain)
@@ -32,7 +31,7 @@ def create_fem_input(Lx, moduli, input_fname, axis, task_name_template,
             'SizeZ {0}'.format(Lx),
             'MeshFileName {0}'.format(mesh_fname),
             'MaterialsGlobalFileName {0}'.format(materials_fname),
-            'TaskName {0}{1}'.format(task_name_template, axis),
+            'TaskName {0}'.format(task_name),
             'G_filler {0}\n'.format(moduli[0])]))
         if len(moduli) == 3: # ternary
             fem_input.write('\n'.join([
