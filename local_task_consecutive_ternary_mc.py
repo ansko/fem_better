@@ -128,7 +128,7 @@ class LocalTaskConsecutiveTernaryMc:
         del structure_settings
         del structure_stdout
         del structure_stderr
-        print('  structure done')
+        print('  structure done', time.asctime())
 
         # fem
         fem_env = os.environ
@@ -159,7 +159,7 @@ class LocalTaskConsecutiveTernaryMc:
         del meshing_parameters
         del fem_gen_stdout
         del fem_gen_stderr
-        print('  gen_mesh done')
+        print('  gen_mesh done', time.asctime())
 
         # fem, process_mesh
         process_mesh_stdout = self.process_mesh_stdout_template.format(
@@ -183,7 +183,7 @@ class LocalTaskConsecutiveTernaryMc:
             return False
         try_remove_files(process_mesh_stdout, process_mesh_stderr,
             '{0}/{1}'.format(self.local_wd, self.process_mesh_input_mesh))
-        print('  process_mesh done')
+        print('  process_mesh done', time.asctime())
 
 
         # fem main
@@ -242,7 +242,7 @@ class LocalTaskConsecutiveTernaryMc:
             results_ready.append(new_results_json_entry)
             with open(full_json_fname, 'w') as f:
                 json.dump(results_ready, f, indent=4)
-            print('  fem_main done on', axis)
+            print('  fem_main done on', axis, time.asctime())
             del fem_main_input
             del fem_main_stdout
             del fem_main_stderr
@@ -265,6 +265,7 @@ class LocalTaskConsecutiveTernaryMc:
             if code:
                 print('+')
                 N += 1
+                consecutive_fails = 0
             else:
                 print('-')
                 consecutive_fails += 1

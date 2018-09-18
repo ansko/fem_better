@@ -174,7 +174,7 @@ class RemoteTaskConsecutiveBinaryMc:
         del structure_settings
         del structure_stdout
         del structure_stderr
-        print('  structure done')
+        print('  structure done', time.asctime())
 
         # cluster, create inputs:
         full_cluster_wd = '{0}/{1}'.format(self.cluster_main_dir, self.remote_wd)
@@ -249,7 +249,7 @@ class RemoteTaskConsecutiveBinaryMc:
         for axis in ['XX', 'YY', 'ZZ']:
             cic.create_sh(
                 local_sh=fem_main_local_shs[axis],
-                log=fem_main_log_names[axis],#self.fem_main_log_template.format(axis),
+                log=fem_main_log_names[axis],
                 exe=self.fem_main_exe,
                 argv=[fem_main_remote_inputs[axis]],
                 sbatch_options=self.fem_main_options)
@@ -447,6 +447,7 @@ class RemoteTaskConsecutiveBinaryMc:
             if code:
                 print('+')
                 N += 1
+                consecutive_fails = 0
             else:
                 print('-')
                 consecutive_fails += 1

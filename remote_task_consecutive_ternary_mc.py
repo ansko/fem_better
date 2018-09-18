@@ -176,7 +176,7 @@ class RemoteTaskConsecutiveTernaryMc:
         del structure_settings
         del structure_stdout
         del structure_stderr
-        print('  structure done')
+        print('  structure done', time.asctime())
 
         # cluster, create inputs:
         full_cluster_wd = '{0}/{1}'.format(self.cluster_main_dir, self.remote_wd)
@@ -450,6 +450,7 @@ class RemoteTaskConsecutiveTernaryMc:
             if code:
                 print('+')
                 N += 1
+                consecutive_fails = 0
             else:
                 print('-')
                 consecutive_fails += 1
