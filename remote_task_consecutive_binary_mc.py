@@ -384,7 +384,6 @@ class RemoteTaskConsecutiveBinaryMc:
                 time.sleep(1)
             time.sleep(self.completion_delay) # fem_main output writing
 
-            print(fem_main_log_names[axis])
             sftp.remove(fem_main_log_names[axis])
             sftp.remove('{0}.out'.format(task_id))
             sftp.remove('{0}.err'.format(task_id))
