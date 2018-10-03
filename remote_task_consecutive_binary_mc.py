@@ -45,6 +45,7 @@ class RemoteTaskConsecutiveBinaryMc:
 
         a = APO(type(self).__name__, local_wd=local_wd)
 
+        self.cluster_donor_dir = a.cluster_donor_dir
         self.disk_thickness = a.th
         self.vertices_number = a.vertices_number
         self.structure_exe = a.structure_exe
