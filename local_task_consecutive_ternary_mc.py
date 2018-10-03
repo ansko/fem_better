@@ -3,6 +3,7 @@ import os
 import resource
 import shutil
 import subprocess
+import sys
 import time
 
 import pprint
@@ -116,6 +117,11 @@ class LocalTaskConsecutiveTernaryMc:
                 structure_stdout, structure_stderr, geo_fname)
             return False
         structure_data = process_structure_log(structure_log)
+        perc_flags = {
+            'XX': structure_data['perc_x'],
+            'YY': structure_data['perc_y'],
+            'ZZ': structure_data['perc_z']
+        }
         new_geo_fname = self.structure_new_geo_fname_template.format(
             geo_subdir, time_tag, structure_data['N_real'], self.Lr, self.ar,
             self.tau)
@@ -227,6 +233,7 @@ class LocalTaskConsecutiveTernaryMc:
                 'E': fem_data['E'],
                 'Ef': self.moduli[0],
                 'Em': self.moduli[1],
+                'perc': perc_flags[axis],
             }
             try_remove_files(fem_main_stdout, fem_main_stderr, fem_main_input)
 

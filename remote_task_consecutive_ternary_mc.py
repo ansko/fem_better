@@ -165,6 +165,11 @@ class RemoteTaskConsecutiveTernaryMc:
                 structure_stdout, structure_stderr, geo_fname)
             return False
         structure_data = process_structure_log(structure_log)
+        perc_flags = {
+            'XX': structure_data['perc_x'],
+            'YY': structure_data['perc_y'],
+            'ZZ': structure_data['perc_z']
+        }
         new_geo_fname = self.structure_new_geo_fname_template.format(
             geo_subdir, time_tag, structure_data['N_real'], self.Lr, self.ar,
             self.tau)
@@ -416,6 +421,7 @@ class RemoteTaskConsecutiveTernaryMc:
                 'E': fem_data['E'],
                 'Ef': self.moduli[0],
                 'Em': self.moduli[1],
+                'perc': perc_flags[axis],
             }
             results_ready = []
             json_name = '{0}/{1}'.format(self.local_wd, self.results_json)
